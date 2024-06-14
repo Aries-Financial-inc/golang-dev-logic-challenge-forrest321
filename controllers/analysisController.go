@@ -25,6 +25,7 @@ type XYValue struct {
 	Y float64 `json:"y"`
 }
 
+// AnalysisHandler handles the request and responses
 func AnalysisHandler(c *gin.Context) {
 	var contracts []models.OptionsContract
 	//Check request
@@ -36,6 +37,20 @@ func AnalysisHandler(c *gin.Context) {
 	//Ensure min / max contracts
 	if len(contracts) == 0 || len(contracts) > 4 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Must contain between 1 and 4 options contracts"})
+		return
+	}
+
+	var errs []error
+	for _, ct := range contracts {
+		err := ct.Validate()
+		if len(err) > 0 {
+			errs = append(errs, err...)
+		}
+	}
+
+	if len(errs) > 0 {
+		c.JSON(http.StatusBadRequest, errs)
+		return
 	}
 
 	response := AnalysisResponse{
@@ -48,15 +63,16 @@ func AnalysisHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// calculateXYValues calculates graph data for the contracts
 func calculateXYValues(contracts []models.OptionsContract) []XYValue {
 	var xyValues []XYValue
 	var x, y float64
 
 	for _, contract := range contracts {
 		x = contract.StrikePrice
-		if contract.Type == call {
+		if contract.GetType() == call {
 			y = contract.Bid
-		} else if contract.Type == put {
+		} else if contract.GetType() == put {
 			y = contract.Ask
 		}
 		xyValues = append(xyValues, XYValue{X: x, Y: y})
@@ -65,13 +81,14 @@ func calculateXYValues(contracts []models.OptionsContract) []XYValue {
 	return xyValues
 }
 
+// calculateMaxProfit calculates the maximum profit for the contracts
 func calculateMaxProfit(contracts []models.OptionsContract) float64 {
 	var profit, maxProfit float64
 
 	for _, contract := range contracts {
-		if contract.Position == long {
+		if contract.GetPosition() == long {
 			profit = calculateLongProfit(contract)
-		} else if contract.Position == short {
+		} else if contract.GetPosition() == short {
 			profit = calculateShortProfit(contract)
 		}
 		if profit > maxProfit {
@@ -82,13 +99,14 @@ func calculateMaxProfit(contracts []models.OptionsContract) float64 {
 	return maxProfit
 }
 
+// calculateMaxLoss finds the maximum loss for the contracts
 func calculateMaxLoss(contracts []models.OptionsContract) float64 {
 	var loss, maxLoss float64
 
 	for _, contract := range contracts {
-		if contract.Position == long {
+		if contract.GetPosition() == long {
 			loss = calculateLongLoss(contract)
-		} else if contract.Position == short {
+		} else if contract.GetPosition() == short {
 			loss = calculateShortLoss(contract)
 		}
 		if loss > maxLoss {
@@ -99,13 +117,14 @@ func calculateMaxLoss(contracts []models.OptionsContract) float64 {
 	return maxLoss
 }
 
+// calculateBreakEvenPoints finds the break even points for the contracts
 func calculateBreakEvenPoints(contracts []models.OptionsContract) []float64 {
 	var breakEvenPoints []float64
 
 	for _, contract := range contracts {
-		if contract.Type == call {
+		if contract.GetType() == call {
 			breakEvenPoints = append(breakEvenPoints, calculateCallBreakEvenPoint(contract))
-		} else if contract.Type == put {
+		} else if contract.GetType() == put {
 			breakEvenPoints = append(breakEvenPoints, calculatePutBreakEvenPoint(contract))
 		}
 	}
@@ -114,54 +133,54 @@ func calculateBreakEvenPoints(contracts []models.OptionsContract) []float64 {
 }
 
 func calculateLongProfit(contract models.OptionsContract) float64 {
-	if contract.Type == call {
+	if contract.GetType() == call {
 		return contract.StrikePrice - contract.Bid
-	} else if contract.Type == put {
+	} else if contract.GetType() == put {
 		return contract.Ask - contract.StrikePrice
 	}
 	return 0
 }
 
 func calculateShortProfit(contract models.OptionsContract) float64 {
-	if contract.Type == call {
+	if contract.GetType() == call {
 		return contract.Bid - contract.StrikePrice
-	} else if contract.Type == put {
+	} else if contract.GetType() == put {
 		return contract.StrikePrice - contract.Ask
 	}
 	return 0
 }
 
 func calculateLongLoss(contract models.OptionsContract) float64 {
-	if contract.Type == call {
+	if contract.GetType() == call {
 		return contract.Bid - contract.StrikePrice
-	} else if contract.Type == put {
+	} else if contract.GetType() == put {
 		return contract.Ask - contract.StrikePrice
 	}
 	return 0
 }
 
 func calculateShortLoss(contract models.OptionsContract) float64 {
-	if contract.Type == call {
+	if contract.GetType() == call {
 		return contract.StrikePrice - contract.Bid
-	} else if contract.Type == put {
+	} else if contract.GetType() == put {
 		return contract.StrikePrice - contract.Ask
 	}
 	return 0
 }
 
 func calculateCallBreakEvenPoint(contract models.OptionsContract) float64 {
-	if contract.Position == long {
+	if contract.GetPosition() == long {
 		return contract.StrikePrice + contract.Bid
-	} else if contract.Position == short {
+	} else if contract.GetPosition() == short {
 		return contract.StrikePrice - contract.Bid
 	}
 	return 0
 }
 
 func calculatePutBreakEvenPoint(contract models.OptionsContract) float64 {
-	if contract.Position == long {
+	if contract.GetPosition() == long {
 		return contract.StrikePrice - contract.Ask
-	} else if contract.Position == short {
+	} else if contract.GetPosition() == short {
 		return contract.StrikePrice + contract.Ask
 	}
 	return 0
